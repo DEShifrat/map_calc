@@ -647,30 +647,95 @@ const MapDisplay: React.FC<MapDisplayProps> = ({
   };
 
   const handleExportMapToPNG = () => {
-    if (!mapInstance || !mapRef.current) {
-      showError('Карта не инициализирована или контейнер карты не найден.');
+    if (!mapInstance) {
+      showError('Карта не инициализирована.');
       return;
     }
 
-    mapInstance.once('rendercomplete', () => {
+    // Create a temporary div to host the off-screen map
+    const exportDiv = document.createElement('div');
+    // Set a large enough size for the export map to ensure good resolution
+    // For example, 10 pixels per meter
+    const exportResolution = 10;
+    exportDiv.style.width = `${mapWidthMeters * exportResolution}px`;
+    exportDiv.style.height = `${mapHeightMeters * exportResolution}px`;
+    exportDiv.style.position = 'absolute';
+    exportDiv.style.top = '-9999px'; // Hide it off-screen
+    document.body.appendChild(exportDiv);
+
+    const imageExtent = [0, 0, mapWidthMeters, mapHeightMeters];
+    const imageProjection = new Projection({
+      code: 'pixel',
+      units: 'pixels',
+      extent: imageExtent,
+    });
+
+    const imageLayer = new ImageLayer({
+      source: new ImageStatic({
+        url: mapImageSrc,
+        imageExtent: imageExtent,
+        projection: imageProjection,
+      }),
+    });
+
+    // Create new vector layers for the export map, using the existing sources
+    // and applying the default styles (without hover effects)
+    const exportBeaconLayer = new VectorLayer({
+      source: beaconVectorSource.current,
+      style: beaconStyle,
+    });
+    exportBeaconLayer.setVisible(showBeacons);
+
+    const exportAntennaLayer = new VectorLayer({
+      source: antennaVectorSource.current,
+      style: (feature) => getAntennaStyle(feature), // Use the style function
+    });
+    exportAntennaLayer.setVisible(showAntennas);
+
+    const exportBarrierLayer = new VectorLayer({
+      source: barrierVectorSource.current,
+      style: barrierStyle,
+    });
+    exportBarrierLayer.setVisible(showBarriers);
+
+    const exportMap = new Map({
+      target: exportDiv,
+      layers: [imageLayer, exportBeaconLayer, exportAntennaLayer, exportBarrierLayer],
+      view: new View({
+        projection: imageProjection,
+        center: getCenter(imageExtent),
+        zoom: 0, // Start at zoom 0 to show the full image
+      }),
+    });
+
+    // Fit the view to the full extent of the map image, using the exportDiv's size
+    exportMap.getView().fit(imageExtent, { size: exportMap.getSize() });
+
+    exportMap.once('rendercomplete', () => {
       try {
-        const mapCanvas = mapRef.current.querySelector('canvas') as HTMLCanvasElement;
-        if (!mapCanvas) {
-          showError('Не удалось найти холст карты.');
+        const exportCanvas = exportDiv.querySelector('canvas') as HTMLCanvasElement;
+        if (!exportCanvas) {
+          showError('Не удалось найти холст для экспорта.');
           return;
         }
 
         const link = document.createElement('a');
         link.download = 'map_export.png';
-        link.href = mapCanvas.toDataURL('image/png');
+        link.href = exportCanvas.toDataURL('image/png');
         link.click();
         showSuccess('Карта успешно экспортирована в PNG!');
       } catch (error) {
         console.error('Ошибка при экспорте карты:', error);
         showError('Ошибка при экспорте карты. Возможно, из-за ограничений безопасности браузера (CORS) для изображений.');
+      } finally {
+        // Clean up the temporary map and div
+        exportMap.setTarget(undefined);
+        document.body.removeChild(exportDiv);
       }
     });
-    mapInstance.renderSync();
+
+    // Force a render of the export map
+    exportMap.renderSync();
   };
 
   // Calculate map areas
