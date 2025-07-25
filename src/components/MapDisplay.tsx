@@ -76,6 +76,7 @@ const MapDisplay: React.FC<MapDisplayProps> = ({
   const [showBeacons, setShowBeacons] = useState(true);
   const [showAntennas, setShowAntennas] = useState(true);
   const [showBarriers, setShowBarriers] = useState(true);
+  const [showAntennaRanges, setShowAntennaRanges] = useState(true); // New state for antenna ranges
 
   // New state for hovered feature ID
   const [hoveredFeatureId, setHoveredFeatureId] = useState<string | null>(null);
@@ -112,7 +113,7 @@ const MapDisplay: React.FC<MapDisplayProps> = ({
       return new Style();
     }
 
-    return [
+    const styles = [
       new Style({
         image: new Icon({
           anchor: [0.5, 1],
@@ -120,18 +121,24 @@ const MapDisplay: React.FC<MapDisplayProps> = ({
           scale: 1.5,
         }),
       }),
-      new Style({
-        geometry: new Circle(position, range),
-        fill: new Fill({
-          color: 'rgba(0, 0, 255, 0.1)',
-        }),
-        stroke: new Stroke({
-          color: 'blue',
-          width: 1,
-        }),
-      }),
     ];
-  }, []);
+
+    if (showAntennaRanges) { // Conditionally add the range circle style
+      styles.push(
+        new Style({
+          geometry: new Circle(position, range),
+          fill: new Fill({
+            color: 'rgba(0, 0, 255, 0.1)',
+          }),
+          stroke: new Stroke({
+            color: 'blue',
+            width: 1,
+          }),
+        })
+      );
+    }
+    return styles;
+  }, [showAntennaRanges]); // Add showAntennaRanges to dependencies
 
   const barrierStyle = new Style({
     fill: new Fill({
@@ -498,44 +505,6 @@ const MapDisplay: React.FC<MapDisplayProps> = ({
     };
   }, [mapInstance, sketchStyle, isEditingAntennasMode, setAntennas]);
 
-  // New useEffect for pointermove to detect hovered features
-  useEffect(() => {
-    if (!mapInstance) return;
-
-    const handlePointerMove = (event: any) => {
-      if (isDeletingBeaconsMode || isDeletingAntennasMode) {
-        let foundFeatureId: string | null = null;
-        mapInstance.forEachFeatureAtPixel(event.pixel, (feature) => {
-          const featureId = feature.get('id');
-          if (featureId && feature.getGeometry()?.getType() === 'Point') {
-            // Check if it's a beacon or antenna
-            const isBeacon = beacons.some(b => b.id === featureId);
-            const isAntenna = antennas.some(a => a.id === featureId);
-
-            if ((isDeletingBeaconsMode && isBeacon) || (isDeletingAntennasMode && isAntenna)) {
-              foundFeatureId = featureId;
-              return true; // Stop iterating
-            }
-          }
-          return false;
-        }, {
-          layerFilter: (layer) => layer === beaconVectorLayer.current || layer === antennaVectorLayer.current,
-          hitTolerance: 10, // Increased hit tolerance for hover detection
-        });
-        setHoveredFeatureId(foundFeatureId);
-      } else {
-        setHoveredFeatureId(null); // Clear hover if not in deletion mode
-      }
-    };
-
-    mapInstance.on('pointermove', handlePointerMove);
-
-    return () => {
-      mapInstance.un('pointermove', handlePointerMove);
-      setHoveredFeatureId(null); // Clear on unmount or mode change
-    };
-  }, [mapInstance, isDeletingBeaconsMode, isDeletingAntennasMode, beacons, antennas]); // Dependencies for pointermove
-
 
   const handleAutoPlaceBeacons = () => {
     const newBeacons: Beacon[] = [];
@@ -860,6 +829,14 @@ const MapDisplay: React.FC<MapDisplayProps> = ({
             onCheckedChange={(checked) => setShowBarriers(Boolean(checked))}
           />
           <Label htmlFor="showBarriers">Показать барьеры</Label>
+        </div>
+        <div className="flex items-center space-x-2">
+          <Checkbox
+            id="showAntennaRanges"
+            checked={showAntennaRanges}
+            onCheckedChange={(checked) => setShowAntennaRanges(Boolean(checked))}
+          />
+          <Label htmlFor="showAntennaRanges">Показать радиус антенн</Label>
         </div>
       </div>
 
