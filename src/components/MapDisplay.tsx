@@ -273,6 +273,11 @@ const MapDisplay: React.FC<MapDisplayProps> = ({
     let drawInteraction: Draw | null = null;
     let snapInteraction: Snap | null = null;
 
+    const onDrawEnd = (event: any) => { // Defined here
+      event.feature.setStyle(barrierStyle);
+      showSuccess('Барьер добавлен!');
+    };
+
     if (isDrawingBarrierMode) {
       drawInteraction = new Draw({
         source: barrierVectorSource.current,
@@ -284,10 +289,6 @@ const MapDisplay: React.FC<MapDisplayProps> = ({
       snapInteraction = new Snap({ source: barrierVectorSource.current });
       mapInstance.addInteraction(snapInteraction);
 
-      const onDrawEnd = (event: any) => {
-        event.feature.setStyle(barrierStyle);
-        showSuccess('Барьер добавлен!');
-      };
       drawInteraction.on('drawend', onDrawEnd);
     }
 
@@ -338,6 +339,21 @@ const MapDisplay: React.FC<MapDisplayProps> = ({
     let modifyBeaconInteraction: Modify | null = null;
     let snapBeaconInteraction: Snap | null = null;
 
+    const onModifyEnd = (event: any) => { // Defined here
+      event.features.forEach((feature: Feature) => {
+        const id = feature.get('id');
+        const geometry = feature.getGeometry();
+        if (id && geometry instanceof Point) {
+          setBeacons(prevBeacons =>
+            prevBeacons.map(b =>
+              b.id === id ? { ...b, position: geometry.getCoordinates() as Coordinate } : b
+            )
+          );
+        }
+      });
+      showSuccess('Позиция маяка обновлена!');
+    };
+
     if (isEditingBeaconsMode) { // Only add interactions if editing mode is active
       modifyBeaconInteraction = new Modify({
         source: beaconVectorSource.current,
@@ -347,21 +363,6 @@ const MapDisplay: React.FC<MapDisplayProps> = ({
 
       snapBeaconInteraction = new Snap({ source: beaconVectorSource.current });
       mapInstance.addInteraction(snapBeaconInteraction);
-
-      const onModifyEnd = (event: any) => {
-        event.features.forEach((feature: Feature) => {
-          const id = feature.get('id');
-          const geometry = feature.getGeometry();
-          if (id && geometry instanceof Point) {
-            setBeacons(prevBeacons =>
-              prevBeacons.map(b =>
-                b.id === id ? { ...b, position: geometry.getCoordinates() as Coordinate } : b
-              )
-            );
-          }
-        });
-        showSuccess('Позиция маяка обновлена!');
-      };
 
       modifyBeaconInteraction.on('modifyend', onModifyEnd);
     }
@@ -375,7 +376,7 @@ const MapDisplay: React.FC<MapDisplayProps> = ({
         mapInstance.removeInteraction(snapBeaconInteraction);
       }
     };
-  }, [mapInstance, sketchStyle, isEditingBeaconsMode]);
+  }, [mapInstance, sketchStyle, isEditingBeaconsMode, setBeacons]);
 
   // Effect to manage Modify and Snap interactions for antennas
   useEffect(() => {
@@ -383,6 +384,21 @@ const MapDisplay: React.FC<MapDisplayProps> = ({
 
     let modifyAntennaInteraction: Modify | null = null;
     let snapAntennaInteraction: Snap | null = null;
+
+    const onModifyEnd = (event: any) => { // Defined here
+      event.features.forEach((feature: Feature) => {
+        const id = feature.get('id');
+        const geometry = feature.getGeometry();
+        if (id && geometry instanceof Point) {
+          setAntennas(prevAntennas =>
+            prevAntennas.map(a =>
+              a.id === id ? { ...a, position: geometry.getCoordinates() as Coordinate } : a
+            )
+          );
+        }
+      });
+      showSuccess('Позиция антенны обновлена!');
+    };
 
     if (isEditingAntennasMode) { // Only add interactions if editing mode is active
       modifyAntennaInteraction = new Modify({
@@ -393,21 +409,6 @@ const MapDisplay: React.FC<MapDisplayProps> = ({
 
       snapAntennaInteraction = new Snap({ source: antennaVectorSource.current });
       mapInstance.addInteraction(snapAntennaInteraction);
-
-      const onModifyEnd = (event: any) => {
-        event.features.forEach((feature: Feature) => {
-          const id = feature.get('id');
-          const geometry = feature.getGeometry();
-          if (id && geometry instanceof Point) {
-            setAntennas(prevAntennas =>
-              prevAntennas.map(a =>
-                a.id === id ? { ...a, position: geometry.getCoordinates() as Coordinate } : a
-              )
-            );
-          }
-        });
-        showSuccess('Позиция антенны обновлена!');
-      };
 
       modifyAntennaInteraction.on('modifyend', onModifyEnd);
     }
@@ -421,7 +422,7 @@ const MapDisplay: React.FC<MapDisplayProps> = ({
         mapInstance.removeInteraction(snapAntennaInteraction);
       }
     };
-  }, [mapInstance, sketchStyle, isEditingAntennasMode]);
+  }, [mapInstance, sketchStyle, isEditingAntennasMode, setAntennas]);
 
 
   const handleAutoPlaceBeacons = () => {
