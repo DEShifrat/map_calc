@@ -63,8 +63,8 @@ const MapDisplay: React.FC<MapDisplayProps> = ({
   const [isDrawingBarrierMode, setIsDrawingBarrierMode] = useState(false);
   const [isEditingBeaconsMode, setIsEditingBeaconsMode] = useState(false);
   const [isEditingAntennasMode, setIsEditingAntennasMode] = useState(false);
-  const [isDeletingBeaconsMode, setIsDeletingBeaconsMode] = useState(false); // New state for beacon deletion
-  const [isDeletingAntennasMode, setIsDeletingAntennasMode] = useState(false); // New state for antenna deletion
+  const [isDeletingBeaconsMode, setIsDeletingBeaconsMode] = useState(false);
+  const [isDeletingAntennasMode, setIsDeletingAntennasMode] = useState(false);
 
   const [autoRssi, setAutoRssi] = useState(70);
   const [autoBeaconStep, setAutoBeaconStep] = useState(5);
@@ -76,6 +76,9 @@ const MapDisplay: React.FC<MapDisplayProps> = ({
   const [showBeacons, setShowBeacons] = useState(true);
   const [showAntennas, setShowAntennas] = useState(true);
   const [showBarriers, setShowBarriers] = useState(true);
+
+  // New state for hovered feature ID
+  const [hoveredFeatureId, setHoveredFeatureId] = useState<string | null>(null);
 
   const calculatedAntennaRange = Math.max(
     10, // Default to 10m if calculation yields less
@@ -160,6 +163,24 @@ const MapDisplay: React.FC<MapDisplayProps> = ({
     }),
   });
 
+  // New hover style for highlighting features
+  const hoverStyle = new Style({
+    stroke: new Stroke({
+      color: 'cyan', // Bright color for highlight
+      width: 3,
+    }),
+    image: new CircleStyle({
+      radius: 10, // Larger circle for visibility
+      stroke: new Stroke({
+        color: 'cyan',
+        width: 3,
+      }),
+      fill: new Fill({
+        color: 'rgba(0, 255, 255, 0.1)', // Slightly transparent fill
+      }),
+    }),
+  });
+
   useEffect(() => {
     if (!mapRef.current) return;
 
@@ -206,6 +227,7 @@ const MapDisplay: React.FC<MapDisplayProps> = ({
     }
   }, [mapInstance, showBeacons, showAntennas, showBarriers]);
 
+  // Effect to update beacon features with dynamic styling (including hover)
   useEffect(() => {
     beaconVectorSource.current.clear();
     beacons.forEach(beacon => {
@@ -213,12 +235,19 @@ const MapDisplay: React.FC<MapDisplayProps> = ({
         geometry: new Point(beacon.position),
         id: beacon.id,
       });
-      feature.setStyle(beaconStyle);
+      feature.setStyle((f) => {
+        const styles = [beaconStyle];
+        if (f.get('id') === hoveredFeatureId) {
+          styles.push(hoverStyle);
+        }
+        return styles;
+      });
       beaconVectorSource.current.addFeature(feature);
     });
     onBeaconsChange(beacons);
-  }, [beacons, onBeaconsChange, beaconStyle]);
+  }, [beacons, onBeaconsChange, beaconStyle, hoveredFeatureId, hoverStyle]);
 
+  // Effect to update antenna features with dynamic styling (including hover)
   useEffect(() => {
     antennaVectorSource.current.clear();
     antennas.forEach(antenna => {
@@ -229,10 +258,16 @@ const MapDisplay: React.FC<MapDisplayProps> = ({
         angle: antenna.angle,
         range: antenna.range,
       });
-      feature.setStyle(getAntennaStyle(feature));
+      feature.setStyle((f) => {
+        const styles = getAntennaStyle(f); // This returns an array of styles
+        if (f.get('id') === hoveredFeatureId) {
+          styles.push(hoverStyle);
+        }
+        return styles;
+      });
       antennaVectorSource.current.addFeature(feature);
     });
-  }, [antennas, getAntennaStyle]);
+  }, [antennas, getAntennaStyle, hoveredFeatureId, hoverStyle]);
 
   const handleMapClick = useCallback((event: any) => {
     if (!mapInstance) return;
@@ -462,6 +497,44 @@ const MapDisplay: React.FC<MapDisplayProps> = ({
       }
     };
   }, [mapInstance, sketchStyle, isEditingAntennasMode, setAntennas]);
+
+  // New useEffect for pointermove to detect hovered features
+  useEffect(() => {
+    if (!mapInstance) return;
+
+    const handlePointerMove = (event: any) => {
+      if (isDeletingBeaconsMode || isDeletingAntennasMode) {
+        let foundFeatureId: string | null = null;
+        mapInstance.forEachFeatureAtPixel(event.pixel, (feature) => {
+          const featureId = feature.get('id');
+          if (featureId && feature.getGeometry()?.getType() === 'Point') {
+            // Check if it's a beacon or antenna
+            const isBeacon = beacons.some(b => b.id === featureId);
+            const isAntenna = antennas.some(a => a.id === featureId);
+
+            if ((isDeletingBeaconsMode && isBeacon) || (isDeletingAntennasMode && isAntenna)) {
+              foundFeatureId = featureId;
+              return true; // Stop iterating
+            }
+          }
+          return false;
+        }, {
+          layerFilter: (layer) => layer === beaconVectorLayer.current || layer === antennaVectorLayer.current,
+          hitTolerance: 10, // Increased hit tolerance for hover detection
+        });
+        setHoveredFeatureId(foundFeatureId);
+      } else {
+        setHoveredFeatureId(null); // Clear hover if not in deletion mode
+      }
+    };
+
+    mapInstance.on('pointermove', handlePointerMove);
+
+    return () => {
+      mapInstance.un('pointermove', handlePointerMove);
+      setHoveredFeatureId(null); // Clear on unmount or mode change
+    };
+  }, [mapInstance, isDeletingBeaconsMode, isDeletingAntennasMode, beacons, antennas]); // Dependencies for pointermove
 
 
   const handleAutoPlaceBeacons = () => {
