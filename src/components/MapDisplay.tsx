@@ -109,11 +109,8 @@ const MapDisplay: React.FC<MapDisplayProps> = ({
     const range = feature.get('range');
     const position = feature.getGeometry()?.getCoordinates();
 
-    if (!position || range === undefined) {
-      return new Style();
-    }
-
-    const styles = [
+    // Always start with the base icon style in an array
+    const styles: Style[] = [
       new Style({
         image: new Icon({
           anchor: [0.5, 1],
@@ -124,18 +121,20 @@ const MapDisplay: React.FC<MapDisplayProps> = ({
     ];
 
     if (showAntennaRanges) { // Conditionally add the range circle style
-      styles.push(
-        new Style({
-          geometry: new Circle(position, range),
-          fill: new Fill({
-            color: 'rgba(0, 0, 255, 0.1)',
-          }),
-          stroke: new Stroke({
-            color: 'blue',
-            width: 1,
-          }),
-        })
-      );
+      if (position && range !== undefined) { // Ensure position and range exist before creating circle
+        styles.push(
+          new Style({
+            geometry: new Circle(position, range),
+            fill: new Fill({
+              color: 'rgba(0, 0, 255, 0.1)',
+            }),
+            stroke: new Stroke({
+              color: 'blue',
+              width: 1,
+            }),
+          })
+        );
+      }
     }
     return styles;
   }, [showAntennaRanges]); // Add showAntennaRanges to dependencies
@@ -504,6 +503,44 @@ const MapDisplay: React.FC<MapDisplayProps> = ({
       }
     };
   }, [mapInstance, sketchStyle, isEditingAntennasMode, setAntennas]);
+
+  // New useEffect for pointermove to detect hovered features
+  useEffect(() => {
+    if (!mapInstance) return;
+
+    const handlePointerMove = (event: any) => {
+      if (isDeletingBeaconsMode || isDeletingAntennasMode) {
+        let foundFeatureId: string | null = null;
+        mapInstance.forEachFeatureAtPixel(event.pixel, (feature) => {
+          const featureId = feature.get('id');
+          if (featureId && feature.getGeometry()?.getType() === 'Point') {
+            // Check if it's a beacon or antenna
+            const isBeacon = beacons.some(b => b.id === featureId);
+            const isAntenna = antennas.some(a => a.id === featureId);
+
+            if ((isDeletingBeaconsMode && isBeacon) || (isDeletingAntennasMode && isAntenna)) {
+              foundFeatureId = featureId;
+              return true; // Stop iterating
+            }
+          }
+          return false;
+        }, {
+          layerFilter: (layer) => layer === beaconVectorLayer.current || layer === antennaVectorLayer.current,
+          hitTolerance: 10, // Increased hit tolerance for hover detection
+        });
+        setHoveredFeatureId(foundFeatureId);
+      } else {
+        setHoveredFeatureId(null); // Clear hover if not in deletion mode
+      }
+    };
+
+    mapInstance.on('pointermove', handlePointerMove);
+
+    return () => {
+      mapInstance.un('pointermove', handlePointerMove);
+      setHoveredFeatureId(null); // Clear on unmount or mode change
+    };
+  }, [mapInstance, isDeletingBeaconsMode, isDeletingAntennasMode, beacons, antennas]); // Dependencies for pointermove
 
 
   const handleAutoPlaceBeacons = () => {
