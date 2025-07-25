@@ -259,32 +259,28 @@ const MapDisplay: React.FC<MapDisplayProps> = ({
     } else if (isDeletingBeaconsMode) {
       mapInstance.forEachFeatureAtPixel(event.pixel, (feature) => {
         const featureId = feature.get('id');
-        if (featureId && feature.getGeometry() instanceof Point && feature.getGeometry()?.getCoordinates() === feature.getGeometry()?.getCoordinates()) { // Simple check to see if it's a point feature
-          const isBeacon = beacons.some(b => b.id === featureId);
-          if (isBeacon) {
-            setBeacons(prev => prev.filter(b => b.id !== featureId));
-            showSuccess('Маяк удален!');
-            return true; // Stop iterating
-          }
+        if (featureId && feature.getGeometry()?.getType() === 'Point') {
+          setBeacons(prev => prev.filter(b => b.id !== featureId));
+          showSuccess('Маяк удален!');
+          return true; // Stop iterating
         }
         return false;
       }, {
         layerFilter: (layer) => layer === beaconVectorLayer.current,
+        hitTolerance: 5, // Increased hit tolerance for easier clicking
       });
     } else if (isDeletingAntennasMode) {
       mapInstance.forEachFeatureAtPixel(event.pixel, (feature) => {
         const featureId = feature.get('id');
-        if (featureId && feature.getGeometry() instanceof Point && feature.getGeometry()?.getCoordinates() === feature.getGeometry()?.getCoordinates()) { // Simple check to see if it's a point feature
-          const isAntenna = antennas.some(a => a.id === featureId);
-          if (isAntenna) {
-            setAntennas(prev => prev.filter(a => a.id !== featureId));
-            showSuccess('Антенна удалена!');
-            return true; // Stop iterating
-          }
+        if (featureId && feature.getGeometry()?.getType() === 'Point') {
+          setAntennas(prev => prev.filter(a => a.id !== featureId));
+          showSuccess('Антенна удалена!');
+          return true; // Stop iterating
         }
         return false;
       }, {
         layerFilter: (layer) => layer === antennaVectorLayer.current,
+        hitTolerance: 5, // Increased hit tolerance for easier clicking
       });
     }
   }, [
@@ -715,13 +711,14 @@ const MapDisplay: React.FC<MapDisplayProps> = ({
         </div>
         <div className="flex flex-col gap-2">
           <Label htmlFor="autoBeaconStep">Шаг расстановки маяков (метры: {autoBeaconStep} м)</Label>
-          <Slider
+          <Input
             id="autoBeaconStep"
-            min={1}
-            max={50}
-            step={1}
-            value={[autoBeaconStep]}
-            onValueChange={(val) => setAutoBeaconStep(val[0])}
+            type="number"
+            value={autoBeaconStep}
+            onChange={(e) => setAutoBeaconStep(Number(e.target.value))}
+            min="1"
+            max="50"
+            step="1"
           />
         </div>
         <Button onClick={handleAutoPlaceBeacons} className="col-span-full">
