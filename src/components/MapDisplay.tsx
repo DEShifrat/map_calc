@@ -916,6 +916,14 @@ const MapDisplay: React.FC<MapDisplayProps> = ({
           <Label>Площадь перемещений:</Label>
           <p className="text-lg font-medium">{movableArea.toFixed(2)} м²</p>
         </div>
+        <div>
+          <Label>Количество маяков:</Label>
+          <p className="text-lg font-medium">{beacons.length}</p>
+        </div>
+        <div>
+          <Label>Количество антенн:</Label>
+          <p className="text-lg font-medium">{antennas.length}</p>
+        </div>
       </div>
 
       <div ref={mapRef} className="w-full h-[600px] border rounded-md" />
