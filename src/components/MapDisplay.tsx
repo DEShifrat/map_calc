@@ -2,19 +2,19 @@ import React, { useRef, useEffect, useState, useCallback } from 'react';
 import { Map, View } from 'ol';
 import ImageLayer from 'ol/layer/Image';
 import ImageStatic from 'ol/source/ImageStatic';
-import { get as getProjection, Projection } from 'ol/proj'; // Импортируем Projection
+import { get as getProjection, Projection } from 'ol/proj';
 import { getCenter } from 'ol/extent';
 import VectorLayer from 'ol/layer/Vector';
 import VectorSource from 'ol/source/Vector';
 import Feature from 'ol/Feature';
 import Point from 'ol/geom/Point';
 import Polygon from 'ol/geom/Polygon';
-import Circle from 'ol/geom/Circle'; // This is ol/geom/Circle
+import Circle from 'ol/geom/Circle';
 import Style from 'ol/style/Style';
 import Icon from 'ol/style/Icon';
 import Fill from 'ol/style/Fill';
 import Stroke from 'ol/style/Stroke';
-import CircleStyle from 'ol/style/Circle'; // This is ol/style/Circle
+import CircleStyle from 'ol/style/Circle';
 import { Coordinate } from 'ol/coordinate';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -213,7 +213,7 @@ const MapDisplay: React.FC<MapDisplayProps> = ({
       beaconVectorSource.current.addFeature(feature);
     });
     onBeaconsChange(beacons);
-  }, [beacons, onBeaconsChange, beaconStyle]); // Added beaconStyle to dependencies
+  }, [beacons, onBeaconsChange, beaconStyle]);
 
   useEffect(() => {
     antennaVectorSource.current.clear();
@@ -264,71 +264,144 @@ const MapDisplay: React.FC<MapDisplayProps> = ({
     }
   }, [mapInstance, isManualBeaconPlacementMode, isManualAntennaPlacementMode, handleMapClick]);
 
-  // Effect to manage Draw, Modify, and Snap interactions for barriers
+  // Effect to manage Draw interaction for barriers
   useEffect(() => {
     if (!mapInstance) return;
 
-    let currentDrawInteraction: Draw | null = null;
-    let currentModifyInteraction: Modify | null = null;
-    let currentSnapInteraction: Snap | null = null;
+    let drawInteraction: Draw | null = null;
+    let snapInteraction: Snap | null = null;
 
-    const addInteractions = () => {
-      if (isDrawingBarrierMode) {
-        currentDrawInteraction = new Draw({
-          source: barrierVectorSource.current,
-          type: 'Polygon',
-          style: sketchStyle,
-        });
-        mapInstance.addInteraction(currentDrawInteraction);
+    if (isDrawingBarrierMode) {
+      drawInteraction = new Draw({
+        source: barrierVectorSource.current,
+        type: 'Polygon',
+        style: sketchStyle,
+      });
+      mapInstance.addInteraction(drawInteraction);
 
-        currentSnapInteraction = new Snap({ source: barrierVectorSource.current });
-        mapInstance.addInteraction(currentSnapInteraction);
+      snapInteraction = new Snap({ source: barrierVectorSource.current });
+      mapInstance.addInteraction(snapInteraction);
 
-        const onDrawEnd = (event: any) => {
-          event.feature.setStyle(barrierStyle);
-          showSuccess('Барьер добавлен!');
-        };
-        currentDrawInteraction.on('drawend', onDrawEnd);
-
-        return () => {
-          if (currentDrawInteraction) {
-            currentDrawInteraction.un('drawend', onDrawEnd); // Remove listener
-            mapInstance.removeInteraction(currentDrawInteraction);
-          }
-          if (currentSnapInteraction) {
-            mapInstance.removeInteraction(currentSnapInteraction);
-          }
-        };
-      } else {
-        currentModifyInteraction = new Modify({
-          source: barrierVectorSource.current,
-          style: sketchStyle,
-        });
-        mapInstance.addInteraction(currentModifyInteraction);
-
-        currentSnapInteraction = new Snap({ source: barrierVectorSource.current });
-        mapInstance.addInteraction(currentSnapInteraction);
-
-        return () => {
-          if (currentModifyInteraction) {
-            mapInstance.removeInteraction(currentModifyInteraction);
-          }
-          if (currentSnapInteraction) {
-            mapInstance.removeInteraction(currentSnapInteraction);
-          }
-        };
-      }
-    };
-
-    const cleanupInteractions = addInteractions();
+      const onDrawEnd = (event: any) => {
+        event.feature.setStyle(barrierStyle);
+        showSuccess('Барьер добавлен!');
+      };
+      drawInteraction.on('drawend', onDrawEnd);
+    }
 
     return () => {
-      if (cleanupInteractions) {
-        cleanupInteractions();
+      if (drawInteraction) {
+        drawInteraction.un('drawend', onDrawEnd);
+        mapInstance.removeInteraction(drawInteraction);
+      }
+      if (snapInteraction) {
+        mapInstance.removeInteraction(snapInteraction);
       }
     };
-
   }, [mapInstance, isDrawingBarrierMode, sketchStyle, barrierStyle]);
+
+  // Effect to manage Modify interaction for barriers
+  useEffect(() => {
+    if (!mapInstance) return;
+
+    let modifyInteraction: Modify | null = null;
+    let snapInteraction: Snap | null = null;
+
+    // Only enable modify if not in drawing mode
+    if (!isDrawingBarrierMode) {
+      modifyInteraction = new Modify({
+        source: barrierVectorSource.current,
+        style: sketchStyle,
+      });
+      mapInstance.addInteraction(modifyInteraction);
+
+      snapInteraction = new Snap({ source: barrierVectorSource.current });
+      mapInstance.addInteraction(snapInteraction);
+    }
+
+    return () => {
+      if (modifyInteraction) {
+        mapInstance.removeInteraction(modifyInteraction);
+      }
+      if (snapInteraction) {
+        mapInstance.removeInteraction(snapInteraction);
+      }
+    };
+  }, [mapInstance, isDrawingBarrierMode, sketchStyle]);
+
+  // Effect to manage Modify and Snap interactions for beacons
+  useEffect(() => {
+    if (!mapInstance) return;
+
+    const modifyBeaconInteraction = new Modify({
+      source: beaconVectorSource.current,
+      style: sketchStyle,
+    });
+    mapInstance.addInteraction(modifyBeaconInteraction);
+
+    const snapBeaconInteraction = new Snap({ source: beaconVectorSource.current });
+    mapInstance.addInteraction(snapBeaconInteraction);
+
+    const onModifyEnd = (event: any) => {
+      event.features.forEach((feature: Feature) => {
+        const id = feature.get('id');
+        const geometry = feature.getGeometry();
+        if (id && geometry instanceof Point) {
+          setBeacons(prevBeacons =>
+            prevBeacons.map(b =>
+              b.id === id ? { ...b, position: geometry.getCoordinates() as Coordinate } : b
+            )
+          );
+        }
+      });
+      showSuccess('Позиция маяка обновлена!');
+    };
+
+    modifyBeaconInteraction.on('modifyend', onModifyEnd);
+
+    return () => {
+      modifyBeaconInteraction.un('modifyend', onModifyEnd);
+      mapInstance.removeInteraction(modifyBeaconInteraction);
+      mapInstance.removeInteraction(snapBeaconInteraction);
+    };
+  }, [mapInstance, sketchStyle]);
+
+  // Effect to manage Modify and Snap interactions for antennas
+  useEffect(() => {
+    if (!mapInstance) return;
+
+    const modifyAntennaInteraction = new Modify({
+      source: antennaVectorSource.current,
+      style: sketchStyle,
+    });
+    mapInstance.addInteraction(modifyAntennaInteraction);
+
+    const snapAntennaInteraction = new Snap({ source: antennaVectorSource.current });
+    mapInstance.addInteraction(snapAntennaInteraction);
+
+    const onModifyEnd = (event: any) => {
+      event.features.forEach((feature: Feature) => {
+        const id = feature.get('id');
+        const geometry = feature.getGeometry();
+        if (id && geometry instanceof Point) {
+          setAntennas(prevAntennas =>
+            prevAntennas.map(a =>
+              a.id === id ? { ...a, position: geometry.getCoordinates() as Coordinate } : a
+            )
+          );
+        }
+      });
+      showSuccess('Позиция антенны обновлена!');
+    };
+
+    modifyAntennaInteraction.on('modifyend', onModifyEnd);
+
+    return () => {
+      modifyAntennaInteraction.un('modifyend', onModifyEnd);
+      mapInstance.removeInteraction(modifyAntennaInteraction);
+      mapInstance.removeInteraction(snapAntennaInteraction);
+    };
+  }, [mapInstance, sketchStyle]);
 
 
   const handleAutoPlaceBeacons = () => {
