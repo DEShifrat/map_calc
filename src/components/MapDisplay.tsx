@@ -356,6 +356,8 @@ const MapDisplay: React.FC<MapDisplayProps> = ({
     const onDrawEnd = (event: any) => {
       event.feature.setStyle(barrierStyle);
       showSuccess('Барьер добавлен!');
+      // Force re-render to update area calculations
+      barrierVectorSource.current.changed();
     };
 
     if (isDrawingBarrierMode) {
@@ -390,6 +392,11 @@ const MapDisplay: React.FC<MapDisplayProps> = ({
     let modifyInteraction: Modify | null = null;
     let snapInteraction: Snap | null = null;
 
+    const onModifyEnd = () => {
+      // Force re-render to update area calculations
+      barrierVectorSource.current.changed();
+    };
+
     // Only enable modify if not in drawing mode
     if (!isDrawingBarrierMode) {
       modifyInteraction = new Modify({
@@ -400,10 +407,13 @@ const MapDisplay: React.FC<MapDisplayProps> = ({
 
       snapInteraction = new Snap({ source: barrierVectorSource.current });
       mapInstance.addInteraction(snapInteraction);
+
+      modifyInteraction.on('modifyend', onModifyEnd);
     }
 
     return () => {
       if (modifyInteraction) {
+        modifyInteraction.un('modifyend', onModifyEnd);
         mapInstance.removeInteraction(modifyInteraction);
       }
       if (snapInteraction) {
@@ -632,6 +642,8 @@ const MapDisplay: React.FC<MapDisplayProps> = ({
   const handleClearBarriers = () => {
     barrierVectorSource.current.clear();
     showSuccess('Все барьеры удалены.');
+    // Force re-render to update area calculations
+    barrierVectorSource.current.changed();
   };
 
   const handleExportMapToPNG = () => {
@@ -660,6 +672,18 @@ const MapDisplay: React.FC<MapDisplayProps> = ({
     });
     mapInstance.renderSync();
   };
+
+  // Calculate map areas
+  const totalMapArea = mapWidthMeters * mapHeightMeters;
+  const totalBarrierArea = barrierVectorSource.current.getFeatures().reduce((sum, feature) => {
+    const geometry = feature.getGeometry();
+    if (geometry instanceof Polygon) {
+      return sum + geometry.getArea();
+    }
+    return sum;
+  }, 0);
+  const movableArea = totalMapArea - totalBarrierArea;
+
 
   return (
     <div className="flex flex-col gap-4">
@@ -874,6 +898,23 @@ const MapDisplay: React.FC<MapDisplayProps> = ({
             onCheckedChange={(checked) => setShowAntennaRanges(Boolean(checked))}
           />
           <Label htmlFor="showAntennaRanges">Показать радиус антенн</Label>
+        </div>
+      </div>
+
+      {/* Map Statistics Section */}
+      <div className="p-4 border rounded-md grid grid-cols-1 md:grid-cols-3 gap-4">
+        <h3 className="text-lg font-semibold col-span-full">Статистика карты:</h3>
+        <div>
+          <Label>Общая площадь карты:</Label>
+          <p className="text-lg font-medium">{totalMapArea.toFixed(2)} м²</p>
+        </div>
+        <div>
+          <Label>Площадь барьеров:</Label>
+          <p className="text-lg font-medium">{totalBarrierArea.toFixed(2)} м²</p>
+        </div>
+        <div>
+          <Label>Площадь перемещений:</Label>
+          <p className="text-lg font-medium">{movableArea.toFixed(2)} м²</p>
         </div>
       </div>
 
