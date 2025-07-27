@@ -38,21 +38,12 @@ interface Antenna {
   range: number; // Coverage radius in meters
 }
 
-interface Barrier {
-  id: string;
-  coordinates: Coordinate[][]; // GeoJSON-like coordinates for Polygon
-}
-
 interface MapDisplayProps {
   mapImageSrc: string;
   mapWidthMeters: number;
   mapHeightMeters: number;
   onBeaconsChange: (beacons: Beacon[]) => void;
   initialBeacons?: Beacon[];
-  onAntennasChange: (antennas: Antenna[]) => void; // New prop
-  initialAntennas?: Antenna[]; // New prop
-  onBarriersChange: (barriers: Barrier[]) => void; // New prop
-  initialBarriers?: Barrier[]; // New prop
 }
 
 const MapDisplay: React.FC<MapDisplayProps> = ({
@@ -61,16 +52,11 @@ const MapDisplay: React.FC<MapDisplayProps> = ({
   mapHeightMeters,
   onBeaconsChange,
   initialBeacons = [],
-  onAntennasChange,
-  initialAntennas = [],
-  onBarriersChange,
-  initialBarriers = [],
 }) => {
   const mapRef = useRef<HTMLDivElement>(null);
   const [mapInstance, setMapInstance] = useState<Map | null>(null);
   const [beacons, setBeacons] = useState<Beacon[]>(initialBeacons);
-  const [antennas, setAntennas] = useState<Antenna[]>(initialAntennas);
-  const [barriers, setBarriers] = useState<Barrier[]>(initialBarriers);
+  const [antennas, setAntennas] = useState<Antenna[]>([]);
 
   const [isManualBeaconPlacementMode, setIsManualBeaconPlacementMode] = useState(false);
   const [isManualAntennaPlacementMode, setIsManualAntennaPlacementMode] = useState(false);
@@ -78,8 +64,7 @@ const MapDisplay: React.FC<MapDisplayProps> = ({
   const [isEditingBeaconsMode, setIsEditingBeaconsMode] = useState(false);
   const [isEditingAntennasMode, setIsEditingAntennasMode] = useState(false);
   const [isDeletingBeaconsMode, setIsDeletingBeaconsMode] = useState(false);
-  const [isDeletingAntennasMode, setIsDeletingAntennaPlacementMode] = useState(false);
-  const [isDeletingBarriersMode, setIsDeletingBarriersMode] = useState(false); // New state for deleting barriers
+  const [isDeletingAntennasMode, setIsDeletingAntennasMode] = useState(false);
 
   const [autoRssi, setAutoRssi] = useState(70);
   const [autoBeaconStep, setAutoBeaconStep] = useState(5);
@@ -91,7 +76,7 @@ const MapDisplay: React.FC<MapDisplayProps> = ({
   const [showBeacons, setShowBeacons] = useState(true);
   const [showAntennas, setShowAntennas] = useState(true);
   const [showBarriers, setShowBarriers] = useState(true);
-  const [showAntennaRanges, setShowAntennaRanges] = useState(true);
+  const [showAntennaRanges, setShowAntennaRanges] = useState(true); // New state for antenna ranges
 
   // New state for hovered feature ID
   const [hoveredFeatureId, setHoveredFeatureId] = useState<string | null>(null);
@@ -248,21 +233,6 @@ const MapDisplay: React.FC<MapDisplayProps> = ({
     }
   }, [mapInstance, showBeacons, showAntennas, showBarriers]);
 
-  // Effect to initialize beacons from props
-  useEffect(() => {
-    setBeacons(initialBeacons);
-  }, [initialBeacons]);
-
-  // Effect to initialize antennas from props
-  useEffect(() => {
-    setAntennas(initialAntennas);
-  }, [initialAntennas]);
-
-  // Effect to initialize barriers from props
-  useEffect(() => {
-    setBarriers(initialBarriers);
-  }, [initialBarriers]);
-
   // Effect to update beacon features with dynamic styling (including hover)
   useEffect(() => {
     beaconVectorSource.current.clear();
@@ -303,29 +273,7 @@ const MapDisplay: React.FC<MapDisplayProps> = ({
       });
       antennaVectorSource.current.addFeature(feature);
     });
-    onAntennasChange(antennas);
-  }, [antennas, onAntennasChange, getAntennaStyle, hoveredFeatureId, hoverStyle]);
-
-  // Effect to update barrier features with dynamic styling (including hover)
-  useEffect(() => {
-    barrierVectorSource.current.clear();
-    barriers.forEach(barrier => {
-      const feature = new Feature({
-        geometry: new Polygon(barrier.coordinates),
-        id: barrier.id,
-      });
-      feature.setStyle((f) => {
-        const styles = [barrierStyle];
-        if (f.get('id') === hoveredFeatureId) {
-          styles.push(hoverStyle);
-        }
-        return styles;
-      });
-      barrierVectorSource.current.addFeature(feature);
-    });
-    onBarriersChange(barriers);
-  }, [barriers, onBarriersChange, barrierStyle, hoveredFeatureId, hoverStyle]);
-
+  }, [antennas, getAntennaStyle, hoveredFeatureId, hoverStyle]);
 
   const handleMapClick = useCallback((event: any) => {
     if (!mapInstance) return;
@@ -375,43 +323,28 @@ const MapDisplay: React.FC<MapDisplayProps> = ({
         layerFilter: (layer) => layer === antennaVectorLayer.current,
         hitTolerance: 5, // Increased hit tolerance for easier clicking
       });
-    } else if (isDeletingBarriersMode) {
-      mapInstance.forEachFeatureAtPixel(event.pixel, (feature) => {
-        const featureId = feature.get('id');
-        if (featureId && feature.getGeometry()?.getType() === 'Polygon') {
-          setBarriers(prev => prev.filter(b => b.id !== featureId));
-          showSuccess('Барьер удален!');
-          return true; // Stop iterating
-        }
-        return false;
-      }, {
-        layerFilter: (layer) => layer === barrierVectorLayer.current,
-        hitTolerance: 5, // Increased hit tolerance for easier clicking
-      });
     }
   }, [
     isManualBeaconPlacementMode,
     isManualAntennaPlacementMode,
     isDeletingBeaconsMode,
     isDeletingAntennasMode,
-    isDeletingBarriersMode,
     mapInstance,
     autoAntennaHeight,
     autoAntennaAngle,
     calculatedAntennaRange,
-    beacons,
-    antennas,
-    barriers,
+    beacons, // Add beacons to dependency array
+    antennas, // Add antennas to dependency array
   ]);
 
   useEffect(() => {
     if (mapInstance) {
       mapInstance.un('click', handleMapClick);
-      if (isManualBeaconPlacementMode || isManualAntennaPlacementMode || isDeletingBeaconsMode || isDeletingAntennasMode || isDeletingBarriersMode) {
+      if (isManualBeaconPlacementMode || isManualAntennaPlacementMode || isDeletingBeaconsMode || isDeletingAntennasMode) {
         mapInstance.on('click', handleMapClick);
       }
     }
-  }, [mapInstance, isManualBeaconPlacementMode, isManualAntennaPlacementMode, isDeletingBeaconsMode, isDeletingAntennasMode, isDeletingBarriersMode, handleMapClick]);
+  }, [mapInstance, isManualBeaconPlacementMode, isManualAntennaPlacementMode, isDeletingBeaconsMode, isDeletingAntennasMode, handleMapClick]);
 
   // Effect to manage Draw interaction for barriers
   useEffect(() => {
@@ -421,11 +354,6 @@ const MapDisplay: React.FC<MapDisplayProps> = ({
     let snapInteraction: Snap | null = null;
 
     const onDrawEnd = (event: any) => {
-      const newBarrier: Barrier = {
-        id: `barrier-${Date.now()}`,
-        coordinates: (event.feature.getGeometry() as Polygon).getCoordinates(),
-      };
-      setBarriers((prev) => [...prev, newBarrier]);
       event.feature.setStyle(barrierStyle);
       showSuccess('Барьер добавлен!');
       // Force re-render to update area calculations
@@ -455,7 +383,7 @@ const MapDisplay: React.FC<MapDisplayProps> = ({
         mapInstance.removeInteraction(snapInteraction);
       }
     };
-  }, [mapInstance, isDrawingBarrierMode, sketchStyle, barrierStyle, setBarriers]);
+  }, [mapInstance, isDrawingBarrierMode, sketchStyle, barrierStyle]);
 
   // Effect to manage Modify interaction for barriers
   useEffect(() => {
@@ -464,19 +392,7 @@ const MapDisplay: React.FC<MapDisplayProps> = ({
     let modifyInteraction: Modify | null = null;
     let snapInteraction: Snap | null = null;
 
-    const onModifyEnd = (event: any) => {
-      event.features.forEach((feature: Feature) => {
-        const id = feature.get('id');
-        const geometry = feature.getGeometry();
-        if (id && geometry instanceof Polygon) {
-          setBarriers(prevBarriers =>
-            prevBarriers.map(b =>
-              b.id === id ? { ...b, coordinates: geometry.getCoordinates() } : b
-            )
-          );
-        }
-      });
-      showSuccess('Барьер обновлен!');
+    const onModifyEnd = () => {
       // Force re-render to update area calculations
       barrierVectorSource.current.changed();
     };
@@ -504,7 +420,7 @@ const MapDisplay: React.FC<MapDisplayProps> = ({
         mapInstance.removeInteraction(snapInteraction);
       }
     };
-  }, [mapInstance, isDrawingBarrierMode, sketchStyle, setBarriers]);
+  }, [mapInstance, isDrawingBarrierMode, sketchStyle]);
 
   // Effect to manage Modify and Snap interactions for beacons
   useEffect(() => {
@@ -603,29 +519,23 @@ const MapDisplay: React.FC<MapDisplayProps> = ({
     if (!mapInstance) return;
 
     const handlePointerMove = (event: any) => {
-      if (isDeletingBeaconsMode || isDeletingAntennasMode || isDeletingBarriersMode) {
+      if (isDeletingBeaconsMode || isDeletingAntennasMode) {
         let foundFeatureId: string | null = null;
         mapInstance.forEachFeatureAtPixel(event.pixel, (feature) => {
           const featureId = feature.get('id');
-          const featureType = feature.getGeometry()?.getType();
-
-          if (featureId) {
+          if (featureId && feature.getGeometry()?.getType() === 'Point') {
+            // Check if it's a beacon or antenna
             const isBeacon = beacons.some(b => b.id === featureId);
             const isAntenna = antennas.some(a => a.id === featureId);
-            const isBarrier = barriers.some(b => b.id === featureId);
 
-            if (
-              (isDeletingBeaconsMode && isBeacon && featureType === 'Point') ||
-              (isDeletingAntennasMode && isAntenna && featureType === 'Point') ||
-              (isDeletingBarriersMode && isBarrier && featureType === 'Polygon')
-            ) {
+            if ((isDeletingBeaconsMode && isBeacon) || (isDeletingAntennasMode && isAntenna)) {
               foundFeatureId = featureId;
               return true; // Stop iterating
             }
           }
           return false;
         }, {
-          layerFilter: (layer) => layer === beaconVectorLayer.current || layer === antennaVectorLayer.current || layer === barrierVectorLayer.current,
+          layerFilter: (layer) => layer === beaconVectorLayer.current || layer === antennaVectorLayer.current,
           hitTolerance: 10, // Increased hit tolerance for hover detection
         });
         setHoveredFeatureId(foundFeatureId);
@@ -640,7 +550,7 @@ const MapDisplay: React.FC<MapDisplayProps> = ({
       mapInstance.un('pointermove', handlePointerMove);
       setHoveredFeatureId(null); // Clear on unmount or mode change
     };
-  }, [mapInstance, isDeletingBeaconsMode, isDeletingAntennasMode, isDeletingBarriersMode, beacons, antennas, barriers]); // Dependencies for pointermove
+  }, [mapInstance, isDeletingBeaconsMode, isDeletingAntennasMode, beacons, antennas]); // Dependencies for pointermove
 
 
   const handleAutoPlaceBeacons = () => {
@@ -675,9 +585,8 @@ const MapDisplay: React.FC<MapDisplayProps> = ({
     setIsDrawingBarrierMode(false);
     setIsEditingBeaconsMode(false);
     setIsEditingAntennasMode(false);
-    setIsDeletingBeaconsMode(false);
-    setIsDeletingAntennaPlacementMode(false);
-    setIsDeletingBarriersMode(false);
+    setIsDeletingBeaconsMode(false); // Deactivate delete modes
+    setIsDeletingAntennasMode(false); // Deactivate delete modes
     showSuccess(`Автоматически размещено ${newBeacons.length} маяков (с учетом барьеров).`);
   };
 
@@ -715,9 +624,8 @@ const MapDisplay: React.FC<MapDisplayProps> = ({
     setIsDrawingBarrierMode(false);
     setIsEditingBeaconsMode(false);
     setIsEditingAntennasMode(false);
-    setIsDeletingBeaconsMode(false);
-    setIsDeletingAntennaPlacementMode(false);
-    setIsDeletingBarriersMode(false);
+    setIsDeletingBeaconsMode(false); // Deactivate delete modes
+    setIsDeletingAntennasMode(false); // Deactivate delete modes
     showSuccess(`Автоматически размещено ${newAntennas.length} антенн (с учетом барьеров).`);
   };
 
@@ -732,8 +640,7 @@ const MapDisplay: React.FC<MapDisplayProps> = ({
   };
 
   const handleClearBarriers = () => {
-    setBarriers([]); // Clear state
-    barrierVectorSource.current.clear(); // Clear OpenLayers source
+    barrierVectorSource.current.clear();
     showSuccess('Все барьеры удалены.');
     // Force re-render to update area calculations
     barrierVectorSource.current.changed();
@@ -838,7 +745,7 @@ const MapDisplay: React.FC<MapDisplayProps> = ({
     if (geometry instanceof Polygon) {
       return sum + geometry.getArea();
     }
-    return 0; // Return 0 if geometry is not a Polygon
+    return sum;
   }, 0);
   const movableArea = totalMapArea - totalBarrierArea;
 
@@ -854,8 +761,7 @@ const MapDisplay: React.FC<MapDisplayProps> = ({
             setIsEditingBeaconsMode(false);
             setIsEditingAntennasMode(false);
             setIsDeletingBeaconsMode(false);
-            setIsDeletingAntennaPlacementMode(false);
-            setIsDeletingBarriersMode(false);
+            setIsDeletingAntennasMode(false);
           }}
           variant={isManualBeaconPlacementMode ? 'destructive' : 'default'}
         >
@@ -869,8 +775,7 @@ const MapDisplay: React.FC<MapDisplayProps> = ({
             setIsEditingBeaconsMode(false);
             setIsEditingAntennasMode(false);
             setIsDeletingBeaconsMode(false);
-            setIsDeletingAntennaPlacementMode(false);
-            setIsDeletingBarriersMode(false);
+            setIsDeletingAntennasMode(false);
           }}
           variant={isManualAntennaPlacementMode ? 'destructive' : 'default'}
         >
@@ -884,8 +789,7 @@ const MapDisplay: React.FC<MapDisplayProps> = ({
             setIsEditingBeaconsMode(false);
             setIsEditingAntennasMode(false);
             setIsDeletingBeaconsMode(false);
-            setIsDeletingAntennaPlacementMode(false);
-            setIsDeletingBarriersMode(false);
+            setIsDeletingAntennasMode(false);
           }}
           variant={isDrawingBarrierMode ? 'destructive' : 'default'}
         >
@@ -899,8 +803,7 @@ const MapDisplay: React.FC<MapDisplayProps> = ({
             setIsDrawingBarrierMode(false);
             setIsEditingAntennasMode(false);
             setIsDeletingBeaconsMode(false);
-            setIsDeletingAntennaPlacementMode(false);
-            setIsDeletingBarriersMode(false);
+            setIsDeletingAntennasMode(false);
           }}
           variant={isEditingBeaconsMode ? 'destructive' : 'default'}
         >
@@ -914,8 +817,7 @@ const MapDisplay: React.FC<MapDisplayProps> = ({
             setIsDrawingBarrierMode(false);
             setIsEditingBeaconsMode(false);
             setIsDeletingBeaconsMode(false);
-            setIsDeletingAntennaPlacementMode(false);
-            setIsDeletingBarriersMode(false);
+            setIsDeletingAntennasMode(false);
           }}
           variant={isEditingAntennasMode ? 'destructive' : 'default'}
         >
@@ -929,8 +831,7 @@ const MapDisplay: React.FC<MapDisplayProps> = ({
             setIsDrawingBarrierMode(false);
             setIsEditingBeaconsMode(false);
             setIsEditingAntennasMode(false);
-            setIsDeletingAntennaPlacementMode(false);
-            setIsDeletingBarriersMode(false);
+            setIsDeletingAntennasMode(false);
           }}
           variant={isDeletingBeaconsMode ? 'destructive' : 'default'}
         >
@@ -938,33 +839,17 @@ const MapDisplay: React.FC<MapDisplayProps> = ({
         </Button>
         <Button
           onClick={() => {
-            setIsDeletingAntennaPlacementMode(!isDeletingAntennasMode);
+            setIsDeletingAntennasMode(!isDeletingAntennasMode);
             setIsManualBeaconPlacementMode(false);
             setIsManualAntennaPlacementMode(false);
             setIsDrawingBarrierMode(false);
             setIsEditingBeaconsMode(false);
             setIsEditingAntennasMode(false);
             setIsDeletingBeaconsMode(false);
-            setIsDeletingBarriersMode(false);
           }}
           variant={isDeletingAntennasMode ? 'destructive' : 'default'}
         >
           {isDeletingAntennasMode ? 'Выйти из режима удаления антенн' : 'Удалить антенну'}
-        </Button>
-        <Button
-          onClick={() => {
-            setIsDeletingBarriersMode(!isDeletingBarriersMode);
-            setIsManualBeaconPlacementMode(false);
-            setIsManualAntennaPlacementMode(false);
-            setIsDrawingBarrierMode(false);
-            setIsEditingBeaconsMode(false);
-            setIsEditingAntennasMode(false);
-            setIsDeletingBeaconsMode(false);
-            setIsDeletingAntennaPlacementMode(false);
-          }}
-          variant={isDeletingBarriersMode ? 'destructive' : 'default'}
-        >
-          {isDeletingBarriersMode ? 'Выйти из режима удаления барьеров' : 'Удалить барьер'}
         </Button>
         <Button onClick={handleClearBeacons} variant="outline">
           Очистить все маяки
@@ -1104,10 +989,6 @@ const MapDisplay: React.FC<MapDisplayProps> = ({
           <Label>Количество антенн:</Label>
           <p className="text-lg font-medium">{antennas.length}</p>
         </div>
-        <div>
-          <Label>Количество барьеров:</Label>
-          <p className="text-lg font-medium">{barriers.length}</p>
-        </div>
       </div>
 
       <div ref={mapRef} className="w-full h-[600px] border rounded-md" />
@@ -1137,20 +1018,6 @@ const MapDisplay: React.FC<MapDisplayProps> = ({
                 Позиция: ({antenna.position[0].toFixed(2)}м, {antenna.position[1].toFixed(2)}м) <br />
                 Высота: {antenna.height.toFixed(1)}м, Угол: {antenna.angle}° <br />
                 Радиус: {antenna.range.toFixed(1)}м
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {barriers.length > 0 && (
-        <div className="mt-4 p-4 border rounded-md">
-          <h3 className="text-lg font-semibold mb-2">Размещенные барьеры:</h3>
-          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2 max-h-48 overflow-y-auto">
-            {barriers.map((barrier) => (
-              <div key={barrier.id} className="bg-gray-100 dark:bg-gray-800 p-2 rounded-sm text-sm">
-                ID: {barrier.id.substring(0, 8)}... <br />
-                Координаты: {barrier.coordinates.length} кольца
               </div>
             ))}
           </div>
